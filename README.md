@@ -45,8 +45,7 @@ Check https://gkeepapi.readthedocs.io/en/latest/#obtaining-a-master-token and ht
 ## Tools
 
 ### Query and read tools
-* `find`: Search notes with optional filters for labels, colors, pinned, archived, and trashed
-* `get`: Get a single note by ID
+* `list_notes`: List all notes with optional filters for labels, colors, pinned, archived, and trashed
 
 ### Creation, update, and deletion tools
 * `create`: Create a new note with a title, text, and an associated label

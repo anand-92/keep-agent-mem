@@ -29,7 +29,7 @@ def _normalize_colors(colors: list[str] | None):
 
 
 @mcp.tool()
-def find(
+def list_notes(
     query: str = "",
     labels: list[str] | None = None,
     colors: list[str] | None = None,
@@ -37,7 +37,7 @@ def find(
     archived: bool | None = False,
     trashed: bool = False,
 ) -> list[dict]:
-    """Find notes using text and optional filters.
+    """List all notes with optional filters.
 
     Args:
         query: The search term or query string to search for in notes.
@@ -60,17 +60,6 @@ def find(
 
     notes_data = [serialize_note(note) for note in notes]
     return notes_data
-
-
-@mcp.tool()
-def get(note_id: str) -> dict:
-    """Get a note by ID.
-
-    Args:
-        note_id: The ID of the note to retrieve.
-    """
-    _, note = _get_note_or_raise(note_id)
-    return serialize_note(note)
 
 
 @mcp.tool()

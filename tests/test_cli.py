@@ -141,10 +141,8 @@ def keep(monkeypatch):
     return keep
 
 
-
-
-def test_find_forwards_filters(keep):
-    result = cli.find(
+def test_list_notes_forwards_filters(keep):
+    result = cli.list_notes(
         query="q",
         labels=["l1"],
         colors=["red"],
@@ -158,23 +156,18 @@ def test_find_forwards_filters(keep):
     assert isinstance(result, list)
 
 
-def test_find_without_colors_passes_none(keep):
-    cli.find(query="q")
+def test_list_notes_without_colors_passes_none(keep):
+    cli.list_notes(query="q")
     assert keep.last_find_kwargs["colors"] is None
 
 
-def test_find_invalid_color_raises(keep, monkeypatch):
+def test_list_notes_invalid_color_raises(keep, monkeypatch):
     def bad_color(_):
         raise ValueError("bad")
 
     monkeypatch.setattr(cli.gkeepapi.node, "ColorValue", bad_color)
     with pytest.raises(ValueError, match="Invalid color 'invalid'"):
-        cli.find(colors=["invalid"])
-
-
-def test_get(keep):
-    data = cli.get("n1")
-    assert data["id"] == "n1"
+        cli.list_notes(colors=["invalid"])
 
 
 def test_create_labels_and_sync(keep):
@@ -232,14 +225,13 @@ async def main_mcp_client(keep):
 async def test_integration_list_tools(main_mcp_client):
     tools = await main_mcp_client.list_tools()
     tool_names = [tool.name for tool in tools]
-    assert "find" in tool_names
-    assert "get" in tool_names
+    assert "list_notes" in tool_names
     assert "create" in tool_names
     assert "update" in tool_names
     assert "delete" in tool_names
 
     # Assert schemas are populated
-    find_tool = next(t for t in tools if t.name == "find")
+    find_tool = next(t for t in tools if t.name == "list_notes")
     assert "query" in find_tool.inputSchema["properties"]
     assert "labels" in find_tool.inputSchema["properties"]
     assert "colors" in find_tool.inputSchema["properties"]
