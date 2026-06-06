@@ -7,8 +7,6 @@ MCP server for Google Keep that serves as cross-device memory for your agents.
 
 1. Add the MCP server to your MCP servers:
 
-### `config.toml` clients (Claude, Droid, Cursor)
-
 ```json
   "mcpServers": {
     "keep-agent-mem": {
