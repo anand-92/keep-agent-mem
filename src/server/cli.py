@@ -57,7 +57,10 @@ def _label_ids_for_names(keep, label_names: list[str] | None):
 
 
 def _get_or_create_label(keep, name: str):
-    keep_label = keep.findLabel(name)
+    get_label = getattr(keep, "getLabel", None)
+    keep_label = get_label(name) if get_label else None
+    if not keep_label:
+        keep_label = keep.findLabel(name)
     if not keep_label:
         keep_label = keep.createLabel(name)
     return keep_label
@@ -85,11 +88,17 @@ def _note_has_label_names(note, label_names: list[str] | None):
 def _note_sort_value(note, sort_by: str):
     if sort_by == "title":
         return (note.title or "").lower()
-    if sort_by == "created":
-        return getattr(note, "created", None) or getattr(note, "created_at", None) or ""
     if sort_by == "pinned":
         return bool(note.pinned)
-    return getattr(note, "updated", None) or getattr(note, "updated_at", None) or getattr(note, "timestamps", None) or ""
+
+    if sort_by == "created":
+        value = getattr(note, "created", None) or getattr(note, "created_at", None)
+    else:
+        value = getattr(note, "updated", None) or getattr(note, "updated_at", None) or getattr(note, "timestamps", None)
+
+    if value is None:
+        return ""
+    return value.isoformat() if hasattr(value, "isoformat") else str(value)
 
 
 def _set_note_metadata(note, color=None, pinned=None, archived=None, trashed=None):
@@ -108,8 +117,10 @@ def _find_duplicate(keep, title: str | None, label_names: list[str], dedupe_by: 
         return None
     if dedupe_by not in {"title", "title_and_label"}:
         raise ValueError("dedupe_by must be one of: none, title, title_and_label")
+    if not title:
+        return None
 
-    for note in keep.find(query=title or "", archived=None, trashed=False):
+    for note in keep.find(query=title, archived=None, trashed=False):
         if title is not None and note.title != title:
             continue
         if dedupe_by == "title_and_label" and not _note_has_label_names(note, label_names):
@@ -130,6 +141,16 @@ def _apply_text(note, text: str | None, text_mode: str):
         note.text = f"{text}{note.text or ''}"
     else:
         raise ValueError("text_mode must be one of: replace, append, prepend")
+
+
+def _list_item_text(item) -> str:
+    if isinstance(item, dict):
+        return str(item.get("text", ""))
+    return str(item)
+
+
+def _list_item_checked(item):
+    return item.get("checked") if isinstance(item, dict) else None
 
 
 def _delete_call(note, names: tuple[str, ...]):
@@ -231,7 +252,7 @@ def create(
     labels: list[str] | None = None,
     label_names: list[str] | None = None,
     note_type: Literal["note", "list"] = "note",
-    items: list[dict] | None = None,
+    items: list[dict | str] | None = None,
     color: str | None = None,
     pinned: bool | None = None,
     archived: bool | None = None,
@@ -247,7 +268,7 @@ def create(
         labels: Additional label names to apply.
         label_names: Additional label names to apply.
         note_type: Create a regular note or a checklist/list note.
-        items: List-note items. Each item can contain text and checked.
+        items: List-note items as strings or dictionaries containing text and checked.
         color: Optional ColorValue string (e.g. DEFAULT, RED, CERULEAN).
         pinned: Optional initial pinned state.
         archived: Optional initial archived state.
@@ -272,10 +293,12 @@ def create(
         create_list = getattr(keep, "createList", None)
         if not create_list:
             raise ValueError("This Google Keep client does not support list-note creation")
-        note = create_list(title=title, items=[item.get("text", "") for item in items or []])
+        note = create_list(title=title, items=[_list_item_text(item) for item in items or []])
         for index, item in enumerate(getattr(note, "items", [])):
-            if index < len(items or []) and (items or [])[index].get("checked") is not None:
-                item.checked = (items or [])[index]["checked"]
+            if index < len(items or []):
+                checked = _list_item_checked((items or [])[index])
+                if checked is not None:
+                    item.checked = checked
     else:
         note = keep.createNote(title=title, text=text)
 
@@ -328,7 +351,7 @@ def update(
     """
     keep, note = _get_note_or_raise(note_id)
 
-    if expected_text_hash and text_hash(note.text) != expected_text_hash:
+    if expected_text_hash and text_hash(getattr(note, "text", None)) != expected_text_hash:
         raise ValueError("Current note text does not match expected_text_hash")
 
     if title is not None:
@@ -339,9 +362,12 @@ def update(
     for label_name in labels_add or []:
         note.labels.add(_get_or_create_label(keep, label_name))
 
-    existing_labels = {label.name: label for label in note.labels.all()}
-    for label_name in labels_remove or []:
-        label = existing_labels.get(label_name)
+    existing_labels = {}
+    for label in note.labels.all():
+        existing_labels[label.name] = label
+        existing_labels[label.id] = label
+    for label_name_or_id in labels_remove or []:
+        label = existing_labels.get(label_name_or_id)
         if label:
             note.labels.remove(label)
 
@@ -376,18 +402,21 @@ def delete(
     if mode == "delete":
         if not confirm:
             raise ValueError("Permanent delete requires confirm=True")
+        note_data = serialize_note(note)
         note.delete()
     elif mode == "restore":
         restored = _delete_call(note, ("untrash", "undelete"))
         if not restored:
             note.trashed = False
+        note_data = serialize_note(note)
     else:
         trashed = _delete_call(note, ("trash",))
         if not trashed:
             note.trashed = True
+        note_data = serialize_note(note)
 
     keep.sync()
-    return {"message": f"Note {note_id} {mode} completed", "note": serialize_note(note)}
+    return {"message": f"Note {note_id} {mode} completed", "note": note_data}
 
 
 def main():

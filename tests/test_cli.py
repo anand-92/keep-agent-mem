@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 import pytest
 from fastmcp.client import Client
 
@@ -198,6 +200,16 @@ def test_list_notes_supports_direct_note_lookup(keep):
     assert "media" in result[0]
 
 
+def test_list_notes_sorts_with_missing_timestamps(keep):
+    keep.notes["n1"].updated = datetime(2026, 1, 2, tzinfo=timezone.utc)
+    keep.notes["n2"] = DummyNote("n2")
+    keep.notes["n2"].updated = None
+
+    result = cli.list_notes(sort_by="updated", sort_order="desc")
+
+    assert [note["id"] for note in result[:2]] == ["n1", "n2"]
+
+
 def test_list_notes_validates_limit(keep):
     with pytest.raises(ValueError, match="limit must be between"):
         cli.list_notes(limit=0)
@@ -245,6 +257,12 @@ def test_create_return_existing_when_duplicate_found(keep):
     assert data["id"] == "n1"
 
 
+def test_create_does_not_dedupe_without_title(keep):
+    data = cli.create(label="keep-agent-mem", dedupe_by="title", if_exists="return_existing")
+
+    assert data["id"] == "created"
+
+
 def test_create_list_note(keep):
     data = cli.create(
         label="keep-agent-mem",
@@ -257,10 +275,29 @@ def test_create_list_note(keep):
     assert data["items"][0]["checked"] is True
 
 
+def test_create_list_note_accepts_string_items(keep):
+    data = cli.create(
+        label="keep-agent-mem",
+        title="list",
+        note_type="list",
+        items=["one", {"text": "two", "checked": True}],
+    )
+
+    assert [item["text"] for item in data["items"]] == ["one", "two"]
+    assert data["items"][1]["checked"] is True
+
+
 def test_create_creates_label_when_missing(keep):
     keep._labels = {}
     data = cli.create(label="my-custom-label", title="t", text="body")
     assert data["labels"][0]["name"] == "my-custom-label"
+
+
+def test_create_accepts_existing_label_id(keep):
+    data = cli.create(label="l1", title="t", text="body")
+
+    assert data["labels"][0]["id"] == "l1"
+    assert data["labels"][0]["name"] == "keep-agent-mem"
 
 
 def test_update_updates_fields(keep):
@@ -279,6 +316,16 @@ def test_update_appends_text_and_metadata(keep):
 def test_update_manages_labels(keep):
     data = cli.update("n1", labels_add=["extra"], labels_remove=["keep-agent-mem"])
     assert {label["name"] for label in data["labels"]} == {"extra"}
+
+
+def test_update_manages_labels_by_id(keep):
+    keep.notes["n1"].labels = DummyLabels()
+
+    added = cli.update("n1", labels_add=["l1"])
+    removed = cli.update("n1", labels_remove=["l1"])
+
+    assert added["labels"][0]["name"] == "keep-agent-mem"
+    assert removed["labels"] == []
 
 
 def test_update_checks_expected_text_hash(keep):
@@ -307,6 +354,21 @@ def test_delete_permanent_with_confirmation(keep):
     data = cli.delete("n1", mode="delete", confirm=True)
     assert data["message"] == "Note n1 delete completed"
     assert keep.notes["n1"].deleted is True
+
+
+def test_delete_permanent_serializes_before_delete(keep):
+    note = keep.notes["n1"]
+
+    def destructive_delete():
+        note.deleted = True
+        del note.title
+
+    note.delete = destructive_delete
+
+    data = cli.delete("n1", mode="delete", confirm=True)
+
+    assert data["note"]["title"] == "title"
+    assert note.deleted is True
 
 
 def test_delete_restore(keep):

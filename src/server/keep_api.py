@@ -105,7 +105,6 @@ def serialize_collaborator(collaborator):
     if email:
         return email
 
-
     return str(collaborator)
 
 
@@ -137,7 +136,7 @@ def serialize_note(note, detail_level='full'):
     if detail_level == 'metadata':
         return payload
 
-    payload['text'] = note.text
+    payload['text'] = getattr(note, 'text', None)
 
     if detail_level == 'summary':
         return payload
