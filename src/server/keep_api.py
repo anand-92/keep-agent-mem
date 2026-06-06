@@ -16,6 +16,7 @@ def get_client():
     global _keep_client
     
     if _keep_client is not None:
+        _keep_client.sync()
         return _keep_client
     
     # Load environment variables
