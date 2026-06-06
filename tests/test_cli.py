@@ -68,6 +68,8 @@ class DummyNote:
         self.collaborators = DummyCollaborators()
         self.blobs = [DummyBlob()]
         self.deleted = False
+        self.created = None
+        self.updated = None
 
     def delete(self):
         self.deleted = True
@@ -102,6 +104,27 @@ class DummyKeep:
         note = DummyNote("created")
         note.title = title
         note.text = text
+        self.notes[note.id] = note
+        return note
+
+    def createList(self, title=None, items=None):
+        note = DummyNote("created-list")
+        note.title = title
+        note.text = ""
+        note.type = type("T", (), {"value": "LIST"})()
+        note.items = [
+            type(
+                "Item",
+                (),
+                {
+                    "id": f"i{index}",
+                    "text": item_text,
+                    "checked": False,
+                    "parent_item": None,
+                },
+            )()
+            for index, item_text in enumerate(items or [])
+        ]
         self.notes[note.id] = note
         return note
 
@@ -156,6 +179,30 @@ def test_list_notes_forwards_filters(keep):
     assert isinstance(result, list)
 
 
+def test_list_notes_supports_label_names_and_pagination(keep):
+    keep.notes["n2"] = DummyNote("n2")
+    keep.notes["n2"].title = "zzz"
+    keep.notes["n2"].labels.add(DummyLabel("l1", "keep-agent-mem"))
+
+    result = cli.list_notes(label_names=["keep-agent-mem"], limit=1, offset=1, sort_by="title", sort_order="asc")
+
+    assert keep.last_find_kwargs["labels"] == ["l1"]
+    assert len(result) == 1
+    assert result[0]["id"] == "n2"
+    assert "media" not in result[0]
+
+
+def test_list_notes_supports_direct_note_lookup(keep):
+    result = cli.list_notes(note_ids=["n1"], detail_level="full")
+    assert result[0]["id"] == "n1"
+    assert "media" in result[0]
+
+
+def test_list_notes_validates_limit(keep):
+    with pytest.raises(ValueError, match="limit must be between"):
+        cli.list_notes(limit=0)
+
+
 def test_list_notes_without_colors_passes_none(keep):
     cli.list_notes(query="q")
     assert keep.last_find_kwargs["colors"] is None
@@ -176,6 +223,40 @@ def test_create_labels_and_sync(keep):
     assert keep.sync_calls == 1
 
 
+def test_create_applies_multiple_labels_and_metadata(keep):
+    data = cli.create(
+        label="keep-agent-mem",
+        labels=["extra"],
+        title="t",
+        text="body",
+        color="red",
+        pinned=True,
+        archived=True,
+    )
+
+    assert {label["name"] for label in data["labels"]} == {"keep-agent-mem", "extra"}
+    assert data["color"] == "red"
+    assert data["pinned"] is True
+    assert data["archived"] is True
+
+
+def test_create_return_existing_when_duplicate_found(keep):
+    data = cli.create(label="keep-agent-mem", title="title", dedupe_by="title", if_exists="return_existing")
+    assert data["id"] == "n1"
+
+
+def test_create_list_note(keep):
+    data = cli.create(
+        label="keep-agent-mem",
+        title="list",
+        note_type="list",
+        items=[{"text": "one", "checked": True}],
+    )
+    assert data["type"] == "LIST"
+    assert data["items"][0]["text"] == "one"
+    assert data["items"][0]["checked"] is True
+
+
 def test_create_creates_label_when_missing(keep):
     keep._labels = {}
     data = cli.create(label="my-custom-label", title="t", text="body")
@@ -188,6 +269,23 @@ def test_update_updates_fields(keep):
     assert data["text"] == "changed"
 
 
+def test_update_appends_text_and_metadata(keep):
+    data = cli.update("n1", text=" plus", text_mode="append", pinned=True, color="red")
+    assert data["text"] == "text plus"
+    assert data["pinned"] is True
+    assert data["color"] == "red"
+
+
+def test_update_manages_labels(keep):
+    data = cli.update("n1", labels_add=["extra"], labels_remove=["keep-agent-mem"])
+    assert {label["name"] for label in data["labels"]} == {"extra"}
+
+
+def test_update_checks_expected_text_hash(keep):
+    with pytest.raises(ValueError, match="expected_text_hash"):
+        cli.update("n1", text="changed", expected_text_hash="wrong")
+
+
 def test_update_not_found_raises(keep):
     with pytest.raises(ValueError, match="not found"):
         cli.update("missing", title="x")
@@ -195,9 +293,27 @@ def test_update_not_found_raises(keep):
 
 def test_delete(keep):
     data = cli.delete("n1")
-    assert data["message"] == "Note n1 marked for deletion"
-    assert keep.notes["n1"].deleted is True
+    assert data["message"] == "Note n1 trash completed"
+    assert keep.notes["n1"].trashed is True
     assert keep.sync_calls == 1
+
+
+def test_delete_permanent_requires_confirmation(keep):
+    with pytest.raises(ValueError, match="confirm=True"):
+        cli.delete("n1", mode="delete")
+
+
+def test_delete_permanent_with_confirmation(keep):
+    data = cli.delete("n1", mode="delete", confirm=True)
+    assert data["message"] == "Note n1 delete completed"
+    assert keep.notes["n1"].deleted is True
+
+
+def test_delete_restore(keep):
+    keep.notes["n1"].trashed = True
+    data = cli.delete("n1", mode="restore")
+    assert data["message"] == "Note n1 restore completed"
+    assert keep.notes["n1"].trashed is False
 
 
 def test_delete_not_found_raises(keep):
@@ -233,7 +349,9 @@ async def test_integration_list_tools(main_mcp_client):
     # Assert schemas are populated
     find_tool = next(t for t in tools if t.name == "list_notes")
     assert "query" in find_tool.inputSchema["properties"]
+    assert "note_ids" in find_tool.inputSchema["properties"]
     assert "labels" in find_tool.inputSchema["properties"]
+    assert "label_names" in find_tool.inputSchema["properties"]
     assert "colors" in find_tool.inputSchema["properties"]
 
 
