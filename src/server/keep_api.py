@@ -1,7 +1,5 @@
-import os
-from hashlib import sha256
-
 import gkeepapi
+import os
 import requests
 from dotenv import load_dotenv
 
@@ -72,44 +70,7 @@ def serialize_list_item(item):
     }
 
 
-def _get_value(value):
-    return value.value if hasattr(value, 'value') else value
-
-
-def _get_timestamp(note, names):
-    for name in names:
-        value = getattr(note, name, None)
-        if value is not None:
-            return value.isoformat() if hasattr(value, 'isoformat') else value
-    return None
-
-
-def _text_preview(text, length=160):
-    if not text:
-        return ''
-    normalized = ' '.join(str(text).split())
-    if len(normalized) <= length:
-        return normalized
-    return f'{normalized[: length - 1]}…'
-
-
-def text_hash(text):
-    return sha256((text or '').encode('utf-8')).hexdigest()
-
-
-def serialize_collaborator(collaborator):
-    if isinstance(collaborator, str):
-        return collaborator
-
-    email = getattr(collaborator, 'email', None)
-    if email:
-        return email
-
-
-    return str(collaborator)
-
-
-def serialize_note(note, detail_level='full'):
+def serialize_note(note):
     """
     Serialize a Google Keep note into a dictionary.
     
@@ -122,27 +83,15 @@ def serialize_note(note, detail_level='full'):
     payload = {
         'id': note.id,
         'title': note.title,
-        'type': _get_value(note.type),
+        'text': note.text,
+        'type': note.type.value,
         'pinned': note.pinned,
         'archived': note.archived,
         'trashed': note.trashed,
-        'color': _get_value(note.color) if note.color else None,
+        'color': note.color.value if note.color else None,
         'labels': [serialize_label(label) for label in note.labels.all()],
-        'text_preview': _text_preview(getattr(note, 'text', None)),
-        'text_hash': text_hash(getattr(note, 'text', None)),
-        'created_at': _get_timestamp(note, ('created', 'created_at', 'create_time')),
-        'updated_at': _get_timestamp(note, ('updated', 'updated_at', 'edit_time', 'timestamps')),
+        'collaborators': list(note.collaborators.all()),
     }
-
-    if detail_level == 'metadata':
-        return payload
-
-    payload['text'] = note.text
-
-    if detail_level == 'summary':
-        return payload
-
-    payload['collaborators'] = [serialize_collaborator(collaborator) for collaborator in note.collaborators.all()]
 
     if hasattr(note, 'items'):
         payload['items'] = [serialize_list_item(item) for item in note.items]
@@ -150,7 +99,7 @@ def serialize_note(note, detail_level='full'):
     payload['media'] = [
         {
             'blob_id': blob.id,
-            'type': _get_value(blob.blob.type) if blob.blob and blob.blob.type else None,
+            'type': blob.blob.type.value if blob.blob and blob.blob.type else None,
         }
         for blob in note.blobs
     ]
