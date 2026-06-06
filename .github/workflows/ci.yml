@@ -29,7 +29,7 @@ jobs:
 
       - name: Install package and test dependencies
         run: |
-          uv pip install -e . pytest pytest-cov ruff python-dotenv
+          uv pip install --system -e . pytest pytest-asyncio pytest-cov ruff python-dotenv
 
       - name: Lint
         run: ruff check .

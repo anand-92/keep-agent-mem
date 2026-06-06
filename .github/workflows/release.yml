@@ -148,7 +148,7 @@ jobs:
       - name: Install test and build dependencies
         if: steps.meta.outputs.release_required == 'true' && steps.tag_check.outputs.exists != 'true'
         run: |
-          uv pip install -e . pytest ruff
+          uv pip install --system -e . pytest pytest-asyncio ruff
 
       - name: Lint
         if: steps.meta.outputs.release_required == 'true' && steps.tag_check.outputs.exists != 'true'
