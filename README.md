@@ -43,12 +43,30 @@ Check https://gkeepapi.readthedocs.io/en/latest/#obtaining-a-master-token and ht
 ## Tools
 
 ### Query and read tools
-* `list_notes`: List all notes with optional filters for labels, colors, pinned, archived, and trashed
+* `list_notes`: Search, list, and directly read notes with optional filters for note IDs, label IDs, label names, colors, pinned, archived, and trashed states. Defaults to `detail_level="summary"` with `limit=50` so agents do not pull unnecessary note content into context.
 
 ### Creation, update, and deletion tools
-* `create`: Create a new note with a title, text, and an associated label
-* `update`: Update a note's title and text
-* `delete`: Delete a note by ID
+* `create`: Create a note or checklist/list note with one or more labels, initial metadata (`color`, `pinned`, `archived`), and optional duplicate handling via `dedupe_by` and `if_exists`.
+* `update`: Update note title/body text, append or prepend text, add/remove labels, set metadata (`color`, `pinned`, `archived`, `trashed`), and guard writes with `expected_text_hash`.
+* `delete`: Manage note lifecycle by ID. Defaults to safe `mode="trash"`; use `mode="restore"` to restore and `mode="delete", confirm=true` for permanent deletion.
+
+### FastMCP-grounded design notes
+
+This server intentionally keeps the same four-tool surface area while using FastMCP features to make those tools easier for agents and clients to reason about:
+
+* Tool signatures use type annotations and enum-like `Literal` values so FastMCP can generate clearer input schemas.
+* Tool return annotations are kept so FastMCP exposes structured content for machine-readable note results.
+* Tool docstrings describe default behavior because FastMCP uses docstrings in tool descriptions.
+* Tool annotations mark `list_notes` as read-only and mark mutating tools as external-system operations, helping clients apply better safety and confirmation UX.
+* Tags group the tools by responsibilities such as `read`, `create`, `update`, `delete`, and `memory` for clients that expose or filter tagged tools.
+
+Potential next improvements, still without adding more tools:
+
+* Replace loose `dict` results with Pydantic/dataclass output models so FastMCP can publish more precise output schemas and clients can hydrate typed results.
+* Use `Annotated`/`Field` parameter metadata for numeric constraints like `limit` and richer descriptions than plain type hints provide.
+* Add FastMCP `meta` values for versioning and compatibility policy, making tool contract changes easier to inspect.
+* Add stricter validation around incompatible argument combinations, such as `items` with `note_type="note"`, and expose those constraints in the generated schema where practical.
+* Consider a future `resource` view for read-only memory snapshots if clients need cacheable project memory, while keeping writes in the existing tools.
 
 
 
