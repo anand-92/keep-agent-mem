@@ -8,6 +8,9 @@ class DummyKeep:
     def authenticate(self, email, token):
         self.auth_calls.append((email, token))
 
+    def sync(self):
+        pass
+
 
 def test_get_client_authenticates_and_caches(monkeypatch):
     keep_api._keep_client = None

@@ -51,6 +51,9 @@ def get_client():
     # Store the client for reuse
     _keep_client = keep
     
+    # Sync to pick up any external changes
+    keep.sync()
+    
     return keep
 
 def serialize_label(label):
