@@ -67,6 +67,16 @@ def test_serialize_note_for_note_type():
     assert "items" not in data
 
 
+def test_serialize_note_handles_missing_text():
+    note = DummyNote()
+    del note.text
+
+    data = serialize_note(note, detail_level="summary")
+
+    assert data["text"] is None
+    assert data["text_preview"] == ""
+
+
 def test_serialize_note_for_list_type():
     data = serialize_note(DummyListNote())
     assert data["items"][0]["id"] == "i1"
