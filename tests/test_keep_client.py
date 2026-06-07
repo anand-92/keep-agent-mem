@@ -17,10 +17,14 @@ def test_get_client_authenticates_and_caches(monkeypatch):
     created = DummyKeep()
 
     monkeypatch.setattr(keep_api, "load_dotenv", lambda: None)
-    monkeypatch.setattr(keep_api.os, "getenv", lambda key: {
-        "GOOGLE_EMAIL": "user@example.com",
-        "GOOGLE_MASTER_TOKEN": "token",
-    }.get(key))
+    monkeypatch.setattr(
+        keep_api.os,
+        "getenv",
+        lambda key: {
+            "GOOGLE_EMAIL": "user@example.com",
+            "GOOGLE_MASTER_TOKEN": "token",
+        }.get(key),
+    )
     monkeypatch.setattr(keep_api.gkeepapi, "Keep", lambda: created)
 
     first = keep_api.get_client()

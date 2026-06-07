@@ -71,13 +71,19 @@ pyproject.toml   deps, scripts, ruff + pytest config
 Tests run fully offline using in-memory `DummyKeep`/`DummyNote` fakes — never hit the
 real Google API in unit/integration tests.
 
-## Commands (run before committing)
+## Commands — MANDATORY before EVERY commit/push
+
+You **MUST** run all three and they **MUST** pass (lint clean, format clean,
+tests green) before committing or pushing. No exceptions. Do not ask — just run them.
 
 ```bash
+uv run ruff format .           # format (this WRITES files — always run, then stage the changes)
 uv run ruff check .            # lint
-uv run ruff format .           # format
 uv run pytest -q               # tests
 ```
+
+`ruff format .` rewrites files: run it first, then `git add` the result so the commit
+is already formatted. Never push without a clean `ruff format --check .`.
 
 CI gate: `ruff check .` must pass and coverage must stay ≥ 70%
 (`pytest --cov=src/server --cov-fail-under=70`).

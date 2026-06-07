@@ -28,7 +28,9 @@ def main() -> None:
 
     # --- Note lifecycle ---
     print("Creating note...")
-    created = json.loads(cli.create(label="keep-agent-mem", title="keep-agent-mem smoke", text="hello"))
+    created = json.loads(
+        cli.create(label="keep-agent-mem", title="keep-agent-mem smoke", text="hello")
+    )
     note_id = created["id"]
     print("Created:", note_id)
 
