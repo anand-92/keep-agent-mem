@@ -94,7 +94,11 @@ def _note_sort_value(note, sort_by: str):
     if sort_by == "created":
         value = getattr(note, "created", None) or getattr(note, "created_at", None)
     else:
-        value = getattr(note, "updated", None) or getattr(note, "updated_at", None) or getattr(note, "timestamps", None)
+        value = (
+            getattr(note, "updated", None)
+            or getattr(note, "updated_at", None)
+            or getattr(note, "timestamps", None)
+        )
 
     if value is None:
         return ""
@@ -357,7 +361,9 @@ def update(
     if title is not None:
         note.title = title
     _apply_text(note, text, text_mode)
-    _set_note_metadata(note, color=_normalize_color(color), pinned=pinned, archived=archived, trashed=trashed)
+    _set_note_metadata(
+        note, color=_normalize_color(color), pinned=pinned, archived=archived, trashed=trashed
+    )
 
     for label_name in labels_add or []:
         note.labels.add(_get_or_create_label(keep, label_name))

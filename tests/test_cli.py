@@ -186,7 +186,9 @@ def test_list_notes_supports_label_names_and_pagination(keep):
     keep.notes["n2"].title = "zzz"
     keep.notes["n2"].labels.add(DummyLabel("l1", "keep-agent-mem"))
 
-    result = cli.list_notes(label_names=["keep-agent-mem"], limit=1, offset=1, sort_by="title", sort_order="asc")
+    result = cli.list_notes(
+        label_names=["keep-agent-mem"], limit=1, offset=1, sort_by="title", sort_order="asc"
+    )
 
     assert keep.last_find_kwargs["labels"] == ["l1"]
     assert len(result) == 1
@@ -253,7 +255,9 @@ def test_create_applies_multiple_labels_and_metadata(keep):
 
 
 def test_create_return_existing_when_duplicate_found(keep):
-    data = cli.create(label="keep-agent-mem", title="title", dedupe_by="title", if_exists="return_existing")
+    data = cli.create(
+        label="keep-agent-mem", title="title", dedupe_by="title", if_exists="return_existing"
+    )
     assert data["id"] == "n1"
 
 

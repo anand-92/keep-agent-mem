@@ -80,6 +80,3 @@ def test_serialize_note_handles_missing_text():
 def test_serialize_note_for_list_type():
     data = serialize_note(DummyListNote())
     assert data["items"][0]["id"] == "i1"
-
-
-
