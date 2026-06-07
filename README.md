@@ -5,6 +5,24 @@ MCP server for Google Keep that serves as cross-device memory for your agents.
 
 ## How to use
 
+The easiest way to get set up is to install the onboarding skill and let your agent do the rest:
+
+1. Install the skill:
+
+```bash
+npx skills add anand-92/keep-agent-mem
+```
+
+2. Ask your agent to set up keep-agent-mem, for example:
+
+> "Set up keep-agent-mem for me."
+
+The skill walks the agent through obtaining your Google Keep master token, merging the MCP config entry, and verifying the server.
+
+## Manual setup
+
+If you'd rather configure it yourself:
+
 1. Add the MCP server to your MCP servers:
 
 ```json
