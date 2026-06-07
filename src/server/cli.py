@@ -1,9 +1,32 @@
-from typing import Literal
+from typing import Annotated
 
 import gkeepapi
 from fastmcp import FastMCP
+from pydantic import Field
 
 from .keep_api import get_client, serialize_note, text_hash
+from .models import (
+    CREATE_META,
+    DELETE_META,
+    LIST_NOTES_META,
+    UPDATE_META,
+    ColorField,
+    DeleteModeType,
+    DeleteResponse,
+    DedupeByType,
+    DetailLevelType,
+    ExpectedTextHashField,
+    IfExistsType,
+    LimitField,
+    NoteModel,
+    NoteTypeType,
+    OffsetField,
+    SortByType,
+    SortOrderType,
+    TextBodyField,
+    TextModeType,
+    TitleField,
+)
 
 mcp = FastMCP("keep")
 
@@ -166,6 +189,10 @@ def _delete_call(note, names: tuple[str, ...]):
     return False
 
 
+def _to_note_model(raw: dict) -> NoteModel:
+    return NoteModel.from_dict(raw)
+
+
 @mcp.tool(
     annotations={
         "title": "List Google Keep notes",
@@ -175,22 +202,69 @@ def _delete_call(note, names: tuple[str, ...]):
         "openWorldHint": True,
     },
     tags={"keep", "read", "memory"},
+    meta=LIST_NOTES_META,
 )
 def list_notes(
-    query: str = "",
-    note_ids: list[str] | None = None,
-    labels: list[str] | None = None,
-    label_names: list[str] | None = None,
-    colors: list[str] | None = None,
-    pinned: bool | None = None,
-    archived: bool | None = False,
-    trashed: bool | None = False,
-    detail_level: Literal["summary", "metadata", "full"] = "summary",
-    limit: int = 50,
-    offset: int = 0,
-    sort_by: Literal["updated", "created", "title", "pinned"] = "updated",
-    sort_order: Literal["asc", "desc"] = "desc",
-) -> list[dict]:
+    query: Annotated[
+        str, Field("", description="Search term or query string to match in note titles/text.")
+    ] = "",
+    note_ids: Annotated[
+        list[str] | None,
+        Field(None, description="Optional list of note IDs for direct lookup (bypasses search)."),
+    ] = None,
+    labels: Annotated[
+        list[str] | None,
+        Field(None, description="List of label IDs to filter notes by."),
+    ] = None,
+    label_names: Annotated[
+        list[str] | None,
+        Field(None, description="List of label names to filter notes by."),
+    ] = None,
+    colors: Annotated[
+        list[str] | None,
+        Field(
+            None,
+            description=(
+                "List of ColorValue strings to filter by "
+                "(e.g. DEFAULT, RED, CERULEAN, BLUE, GREEN, YELLOW, PINK, PURPLE, GRAY, TEAL, ORANGE, WHITE)."
+            ),
+        ),
+    ] = None,
+    pinned: Annotated[
+        bool | None,
+        Field(
+            None,
+            description="Filter by pinned status: True=pinned only, False=unpinned only, None=both.",
+        ),
+    ] = None,
+    archived: Annotated[
+        bool | None,
+        Field(
+            False, description="Filter by archived status. Defaults to False (exclude archived)."
+        ),
+    ] = False,
+    trashed: Annotated[
+        bool | None,
+        Field(False, description="Filter by trashed status. Defaults to False (exclude trashed)."),
+    ] = False,
+    detail_level: Annotated[
+        DetailLevelType,
+        Field(
+            "summary",
+            description="summary=compact, metadata=no text, full=all fields including media.",
+        ),
+    ] = "summary",
+    limit: Annotated[int, LimitField] = 50,
+    offset: Annotated[int, OffsetField] = 0,
+    sort_by: Annotated[
+        SortByType,
+        Field("updated", description="Sort key: updated, created, title, or pinned."),
+    ] = "updated",
+    sort_order: Annotated[
+        SortOrderType,
+        Field("desc", description="Sort direction: asc or desc."),
+    ] = "desc",
+) -> list[NoteModel]:
     """Search, list, or directly read notes with context-efficient output.
 
     Args:
@@ -235,8 +309,7 @@ def list_notes(
     notes = sorted(notes, key=lambda note: _note_sort_value(note, sort_by), reverse=reverse)
     notes = notes[offset : offset + limit]
 
-    notes_data = [serialize_note(note, detail_level=detail_level) for note in notes]
-    return notes_data
+    return [_to_note_model(serialize_note(note, detail_level=detail_level)) for note in notes]
 
 
 @mcp.tool(
@@ -248,21 +321,65 @@ def list_notes(
         "openWorldHint": True,
     },
     tags={"keep", "create", "memory"},
+    meta=CREATE_META,
 )
 def create(
-    label: str | None = None,
-    title: str | None = None,
-    text: str | None = None,
-    labels: list[str] | None = None,
-    label_names: list[str] | None = None,
-    note_type: Literal["note", "list"] = "note",
-    items: list[dict | str] | None = None,
-    color: str | None = None,
-    pinned: bool | None = None,
-    archived: bool | None = None,
-    dedupe_by: Literal["none", "title", "title_and_label"] = "none",
-    if_exists: Literal["create", "update", "return_existing", "error"] = "create",
-) -> dict:
+    label: Annotated[
+        str | None,
+        Field(
+            None,
+            description=(
+                "Backward-compatible single label name. "
+                "If absent, agents should use the current project/repository name."
+            ),
+        ),
+    ] = None,
+    title: Annotated[str | None, TitleField] = None,
+    text: Annotated[str | None, TextBodyField] = None,
+    labels: Annotated[
+        list[str] | None,
+        Field(
+            None, description="Additional label names to apply. Prefer 'label' or 'label_names'."
+        ),
+    ] = None,
+    label_names: Annotated[
+        list[str] | None,
+        Field(None, description="Additional label names to apply."),
+    ] = None,
+    note_type: Annotated[
+        NoteTypeType,
+        Field("note", description="Create a regular note or a checklist/list note."),
+    ] = "note",
+    items: Annotated[
+        list[dict | str] | None,
+        Field(
+            None, description="List-note items as strings or dicts with 'text' and 'checked' keys."
+        ),
+    ] = None,
+    color: Annotated[str | None, ColorField] = None,
+    pinned: Annotated[
+        bool | None,
+        Field(None, description="Optional initial pinned state."),
+    ] = None,
+    archived: Annotated[
+        bool | None,
+        Field(None, description="Optional initial archived state."),
+    ] = None,
+    dedupe_by: Annotated[
+        DedupeByType,
+        Field(
+            "none",
+            description="Existing-note lookup mode before creating: none, title, or title_and_label.",
+        ),
+    ] = "none",
+    if_exists: Annotated[
+        IfExistsType,
+        Field(
+            "create",
+            description="Action when dedupe finds an existing note: create, update, return_existing, or error.",
+        ),
+    ] = "create",
+) -> NoteModel:
     """Create a note or list note with labels, metadata, and optional dedupe behavior.
 
     Args:
@@ -284,7 +401,7 @@ def create(
     duplicate = _find_duplicate(keep, title, label_names, dedupe_by)
 
     if duplicate and if_exists == "return_existing":
-        return serialize_note(duplicate)
+        return _to_note_model(serialize_note(duplicate))
     if duplicate and if_exists == "error":
         raise ValueError(f"A matching note already exists: {duplicate.id}")
 
@@ -312,7 +429,7 @@ def create(
         note.labels.add(_get_or_create_label(keep, label_name))
     keep.sync()
 
-    return serialize_note(note)
+    return _to_note_model(serialize_note(note))
 
 
 @mcp.tool(
@@ -324,20 +441,39 @@ def create(
         "openWorldHint": True,
     },
     tags={"keep", "update", "memory"},
+    meta=UPDATE_META,
 )
 def update(
-    note_id: str,
-    title: str | None = None,
-    text: str | None = None,
-    text_mode: Literal["replace", "append", "prepend"] = "replace",
-    labels_add: list[str] | None = None,
-    labels_remove: list[str] | None = None,
-    color: str | None = None,
-    pinned: bool | None = None,
-    archived: bool | None = None,
-    trashed: bool | None = None,
-    expected_text_hash: str | None = None,
-) -> dict:
+    note_id: Annotated[str, Field(..., description="The ID of the note to update.")],
+    title: Annotated[str | None, TitleField] = None,
+    text: Annotated[str | None, TextBodyField] = None,
+    text_mode: Annotated[
+        TextModeType,
+        Field(
+            "replace",
+            description="How to apply text: replace overwrites, append/prepend adds to existing.",
+        ),
+    ] = "replace",
+    labels_add: Annotated[
+        list[str] | None,
+        Field(None, description="Label names to add; missing labels are created automatically."),
+    ] = None,
+    labels_remove: Annotated[
+        list[str] | None,
+        Field(None, description="Label names or IDs to remove from the note."),
+    ] = None,
+    color: Annotated[str | None, ColorField] = None,
+    pinned: Annotated[
+        bool | None, Field(None, description="Set the pinned state of the note.")
+    ] = None,
+    archived: Annotated[
+        bool | None, Field(None, description="Set the archived state of the note.")
+    ] = None,
+    trashed: Annotated[
+        bool | None, Field(None, description="Set the trashed state of the note.")
+    ] = None,
+    expected_text_hash: Annotated[str | None, ExpectedTextHashField] = None,
+) -> NoteModel:
     """Update note content, labels, metadata, and optional optimistic text hash.
 
     Args:
@@ -378,7 +514,7 @@ def update(
             note.labels.remove(label)
 
     keep.sync()
-    return serialize_note(note)
+    return _to_note_model(serialize_note(note))
 
 
 @mcp.tool(
@@ -390,12 +526,25 @@ def update(
         "openWorldHint": True,
     },
     tags={"keep", "delete", "memory"},
+    meta=DELETE_META,
 )
 def delete(
-    note_id: str,
-    mode: Literal["trash", "delete", "restore"] = "trash",
-    confirm: bool = False,
-) -> dict:
+    note_id: Annotated[str, Field(..., description="The ID of the note to delete or restore.")],
+    mode: Annotated[
+        DeleteModeType,
+        Field(
+            "trash",
+            description=(
+                "Operation mode: trash (safe default, reversible), "
+                "delete (permanent, requires confirm=True), or restore (untrash)."
+            ),
+        ),
+    ] = "trash",
+    confirm: Annotated[
+        bool,
+        Field(False, description="Must be True to allow permanent deletion (mode='delete')."),
+    ] = False,
+) -> DeleteResponse:
     """Trash, permanently delete, or restore a note by ID.
 
     Args:
@@ -408,21 +557,21 @@ def delete(
     if mode == "delete":
         if not confirm:
             raise ValueError("Permanent delete requires confirm=True")
-        note_data = serialize_note(note)
+        note_data = _to_note_model(serialize_note(note))
         note.delete()
     elif mode == "restore":
         restored = _delete_call(note, ("untrash", "undelete"))
         if not restored:
             note.trashed = False
-        note_data = serialize_note(note)
+        note_data = _to_note_model(serialize_note(note))
     else:
         trashed = _delete_call(note, ("trash",))
         if not trashed:
             note.trashed = True
-        note_data = serialize_note(note)
+        note_data = _to_note_model(serialize_note(note))
 
     keep.sync()
-    return {"message": f"Note {note_id} {mode} completed", "note": note_data}
+    return DeleteResponse(message=f"Note {note_id} {mode} completed", note=note_data)
 
 
 def main():

@@ -4,6 +4,7 @@ import pytest
 from fastmcp.client import Client
 
 from server import cli
+from server.models import DeleteResponse, LabelModel, NoteModel
 
 
 class DummyLabel:
@@ -192,14 +193,15 @@ def test_list_notes_supports_label_names_and_pagination(keep):
 
     assert keep.last_find_kwargs["labels"] == ["l1"]
     assert len(result) == 1
-    assert result[0]["id"] == "n2"
-    assert "media" not in result[0]
+    assert result[0].id == "n2"
+    # summary detail_level: media should be None (not included)
+    assert result[0].media is None
 
 
 def test_list_notes_supports_direct_note_lookup(keep):
     result = cli.list_notes(note_ids=["n1"], detail_level="full")
-    assert result[0]["id"] == "n1"
-    assert "media" in result[0]
+    assert result[0].id == "n1"
+    assert result[0].media is not None
 
 
 def test_list_notes_sorts_with_missing_timestamps(keep):
@@ -209,7 +211,7 @@ def test_list_notes_sorts_with_missing_timestamps(keep):
 
     result = cli.list_notes(sort_by="updated", sort_order="desc")
 
-    assert [note["id"] for note in result[:2]] == ["n1", "n2"]
+    assert [note.id for note in result[:2]] == ["n1", "n2"]
 
 
 def test_list_notes_validates_limit(keep):
@@ -231,9 +233,16 @@ def test_list_notes_invalid_color_raises(keep, monkeypatch):
         cli.list_notes(colors=["invalid"])
 
 
+def test_list_notes_returns_note_models(keep):
+    result = cli.list_notes()
+    assert isinstance(result, list)
+    assert all(isinstance(note, NoteModel) for note in result)
+
+
 def test_create_labels_and_sync(keep):
     data = cli.create(label="keep-agent-mem", title="t", text="body")
-    assert data["id"] == "created"
+    assert isinstance(data, NoteModel)
+    assert data.id == "created"
     assert keep.sync_calls == 1
 
 
@@ -248,23 +257,23 @@ def test_create_applies_multiple_labels_and_metadata(keep):
         archived=True,
     )
 
-    assert {label["name"] for label in data["labels"]} == {"keep-agent-mem", "extra"}
-    assert data["color"] == "red"
-    assert data["pinned"] is True
-    assert data["archived"] is True
+    assert {label.name for label in data.labels} == {"keep-agent-mem", "extra"}
+    assert data.color == "red"
+    assert data.pinned is True
+    assert data.archived is True
 
 
 def test_create_return_existing_when_duplicate_found(keep):
     data = cli.create(
         label="keep-agent-mem", title="title", dedupe_by="title", if_exists="return_existing"
     )
-    assert data["id"] == "n1"
+    assert data.id == "n1"
 
 
 def test_create_does_not_dedupe_without_title(keep):
     data = cli.create(label="keep-agent-mem", dedupe_by="title", if_exists="return_existing")
 
-    assert data["id"] == "created"
+    assert data.id == "created"
 
 
 def test_create_list_note(keep):
@@ -274,9 +283,9 @@ def test_create_list_note(keep):
         note_type="list",
         items=[{"text": "one", "checked": True}],
     )
-    assert data["type"] == "LIST"
-    assert data["items"][0]["text"] == "one"
-    assert data["items"][0]["checked"] is True
+    assert data.type == "LIST"
+    assert data.items[0].text == "one"
+    assert data.items[0].checked is True
 
 
 def test_create_list_note_accepts_string_items(keep):
@@ -287,39 +296,40 @@ def test_create_list_note_accepts_string_items(keep):
         items=["one", {"text": "two", "checked": True}],
     )
 
-    assert [item["text"] for item in data["items"]] == ["one", "two"]
-    assert data["items"][1]["checked"] is True
+    assert [item.text for item in data.items] == ["one", "two"]
+    assert data.items[1].checked is True
 
 
 def test_create_creates_label_when_missing(keep):
     keep._labels = {}
     data = cli.create(label="my-custom-label", title="t", text="body")
-    assert data["labels"][0]["name"] == "my-custom-label"
+    assert data.labels[0].name == "my-custom-label"
 
 
 def test_create_accepts_existing_label_id(keep):
     data = cli.create(label="l1", title="t", text="body")
 
-    assert data["labels"][0]["id"] == "l1"
-    assert data["labels"][0]["name"] == "keep-agent-mem"
+    assert data.labels[0].id == "l1"
+    assert data.labels[0].name == "keep-agent-mem"
 
 
 def test_update_updates_fields(keep):
     data = cli.update("n1", title="new", text="changed")
-    assert data["title"] == "new"
-    assert data["text"] == "changed"
+    assert isinstance(data, NoteModel)
+    assert data.title == "new"
+    assert data.text == "changed"
 
 
 def test_update_appends_text_and_metadata(keep):
     data = cli.update("n1", text=" plus", text_mode="append", pinned=True, color="red")
-    assert data["text"] == "text plus"
-    assert data["pinned"] is True
-    assert data["color"] == "red"
+    assert data.text == "text plus"
+    assert data.pinned is True
+    assert data.color == "red"
 
 
 def test_update_manages_labels(keep):
     data = cli.update("n1", labels_add=["extra"], labels_remove=["keep-agent-mem"])
-    assert {label["name"] for label in data["labels"]} == {"extra"}
+    assert {label.name for label in data.labels} == {"extra"}
 
 
 def test_update_manages_labels_by_id(keep):
@@ -328,8 +338,8 @@ def test_update_manages_labels_by_id(keep):
     added = cli.update("n1", labels_add=["l1"])
     removed = cli.update("n1", labels_remove=["l1"])
 
-    assert added["labels"][0]["name"] == "keep-agent-mem"
-    assert removed["labels"] == []
+    assert added.labels[0].name == "keep-agent-mem"
+    assert removed.labels == []
 
 
 def test_update_checks_expected_text_hash(keep):
@@ -344,7 +354,8 @@ def test_update_not_found_raises(keep):
 
 def test_delete(keep):
     data = cli.delete("n1")
-    assert data["message"] == "Note n1 trash completed"
+    assert isinstance(data, DeleteResponse)
+    assert data.message == "Note n1 trash completed"
     assert keep.notes["n1"].trashed is True
     assert keep.sync_calls == 1
 
@@ -356,7 +367,7 @@ def test_delete_permanent_requires_confirmation(keep):
 
 def test_delete_permanent_with_confirmation(keep):
     data = cli.delete("n1", mode="delete", confirm=True)
-    assert data["message"] == "Note n1 delete completed"
+    assert data.message == "Note n1 delete completed"
     assert keep.notes["n1"].deleted is True
 
 
@@ -371,14 +382,14 @@ def test_delete_permanent_serializes_before_delete(keep):
 
     data = cli.delete("n1", mode="delete", confirm=True)
 
-    assert data["note"]["title"] == "title"
+    assert data.note.title == "title"
     assert note.deleted is True
 
 
 def test_delete_restore(keep):
     keep.notes["n1"].trashed = True
     data = cli.delete("n1", mode="restore")
-    assert data["message"] == "Note n1 restore completed"
+    assert data.message == "Note n1 restore completed"
     assert keep.notes["n1"].trashed is False
 
 
@@ -396,6 +407,76 @@ def test_main_runs_stdio_transport(monkeypatch):
     monkeypatch.setattr(cli.mcp, "run", fake_run)
     cli.main()
     assert captured["transport"] == "stdio"
+
+
+# ---------------------------------------------------------------------------
+# Model / schema tests
+# ---------------------------------------------------------------------------
+
+
+def test_note_model_from_dict_full(keep):
+    """NoteModel.from_dict correctly parses all fields including items and media."""
+    from server.keep_api import serialize_note
+
+    raw = serialize_note(keep.notes["n1"], detail_level="full")
+    model = NoteModel.from_dict(raw)
+
+    assert model.id == "n1"
+    assert isinstance(model.labels, list)
+    assert all(isinstance(lbl, LabelModel) for lbl in model.labels)
+    assert model.media is not None
+
+
+def test_note_model_from_dict_summary(keep):
+    """NoteModel.from_dict for summary level has text but no media."""
+    from server.keep_api import serialize_note
+
+    raw = serialize_note(keep.notes["n1"], detail_level="summary")
+    model = NoteModel.from_dict(raw)
+
+    assert model.text == "text"
+    assert model.media is None
+    assert model.collaborators is None
+
+
+def test_note_model_from_dict_metadata(keep):
+    """NoteModel.from_dict for metadata level has no text."""
+    from server.keep_api import serialize_note
+
+    raw = serialize_note(keep.notes["n1"], detail_level="metadata")
+    model = NoteModel.from_dict(raw)
+
+    assert model.text is None
+    assert model.media is None
+
+
+def test_delete_response_model(keep):
+    """DeleteResponse wraps the note snapshot correctly."""
+    data = cli.delete("n1")
+    assert isinstance(data, DeleteResponse)
+    assert isinstance(data.note, NoteModel)
+    assert data.note.id == "n1"
+
+
+async def test_tool_meta_exposed_on_tools():
+    """Each tool exposes meta with schema_version and backend."""
+    from server.models import BACKEND, SCHEMA_VERSION
+
+    for tool_name in ("list_notes", "create", "update", "delete"):
+        tool = await cli.mcp.get_tool(tool_name)
+        assert tool is not None, f"Tool {tool_name!r} not registered"
+        assert tool.meta is not None, f"Tool {tool_name!r} has no meta"
+        assert tool.meta.get("schema_version") == SCHEMA_VERSION
+        assert tool.meta.get("backend") == BACKEND
+
+
+async def test_list_notes_field_constraints_in_schema():
+    """limit and offset fields carry ge/le constraints in JSON schema."""
+    tool = await cli.mcp.get_tool("list_notes")
+    props = tool.parameters["properties"]
+    assert props["limit"]["minimum"] == 1
+    assert props["limit"]["maximum"] == 200
+    assert props["offset"]["minimum"] == 0
 
 
 @pytest.fixture
@@ -419,6 +500,10 @@ async def test_integration_list_tools(main_mcp_client):
     assert "labels" in find_tool.inputSchema["properties"]
     assert "label_names" in find_tool.inputSchema["properties"]
     assert "colors" in find_tool.inputSchema["properties"]
+
+    # Assert limit constraint is schema-visible
+    assert find_tool.inputSchema["properties"]["limit"].get("minimum") == 1
+    assert find_tool.inputSchema["properties"]["limit"].get("maximum") == 200
 
 
 async def test_integration_create_note(main_mcp_client, keep):
