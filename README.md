@@ -58,9 +58,13 @@ GOOGLE_MASTER_TOKEN = "your-master-token"
 * `GOOGLE_EMAIL`: Your Google account email address
 * `GOOGLE_MASTER_TOKEN`: Your Google account master token
 
-For credential setup, use the agent skill instead of copying token commands by hand: give [`skills/keep-agent-mem/SKILL.md`](skills/keep-agent-mem/SKILL.md) to your agent and ask it to guide you. The skill includes the current Google Keep master-token flow, the bundled token-exchange helper, config templates, verification steps, and troubleshooting notes.
+For credential setup, give [`skills/keep-agent-mem/SKILL.md`](skills/keep-agent-mem/SKILL.md) to your agent and ask it to guide you. The skill tells you to open `https://accounts.google.com/EmbeddedSetup`, copy the `oauth_token` cookie, and run the bundled exchange script to create your `GOOGLE_MASTER_TOKEN`:
 
-Reference docs for the underlying token flow: https://gkeepapi.readthedocs.io/en/latest/#obtaining-a-master-token and https://github.com/simon-weber/gpsoauth?tab=readme-ov-file#alternative-flow.
+```bash
+uv run --with gpsoauth python scripts/exchange_google_keep_token.py --email you@example.com --oauth-token "oauth2_4/..." --out master_token.txt
+```
+
+Then put the token from `master_token.txt` into your MCP config and delete or secure the file after use.
 
 ## Tools
 
