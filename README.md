@@ -5,15 +5,17 @@ MCP server for Google Keep that serves as cross-device memory for your agents.
 
 ## How to use
 
-The easiest way to get set up is to install the onboarding skill and let your agent do the rest:
+The easiest way to get set up is to give your agent the onboarding skill and let it guide you through the rest:
 
-1. Install the skill:
+1. Give the skill to your agent. If your agent supports installing skills directly, install this repository's skill:
 
 ```bash
 npx skills add anand-92/keep-agent-mem
 ```
 
-2. Ask your agent to set up keep-agent-mem, for example:
+If not, share the contents of [`skills/keep-agent-mem/SKILL.md`](skills/keep-agent-mem/SKILL.md) with your agent.
+
+2. Ask your agent to set up keep-agent-mem and guide you through getting credentials, for example:
 
 > "Set up keep-agent-mem for me."
 
@@ -56,7 +58,9 @@ GOOGLE_MASTER_TOKEN = "your-master-token"
 * `GOOGLE_EMAIL`: Your Google account email address
 * `GOOGLE_MASTER_TOKEN`: Your Google account master token
 
-Check https://gkeepapi.readthedocs.io/en/latest/#obtaining-a-master-token and https://github.com/simon-weber/gpsoauth?tab=readme-ov-file#alternative-flow for more information.
+For credential setup, use the agent skill instead of copying token commands by hand: give [`skills/keep-agent-mem/SKILL.md`](skills/keep-agent-mem/SKILL.md) to your agent and ask it to guide you. The skill includes the current Google Keep master-token flow, the bundled token-exchange helper, config templates, verification steps, and troubleshooting notes.
+
+Reference docs for the underlying token flow: https://gkeepapi.readthedocs.io/en/latest/#obtaining-a-master-token and https://github.com/simon-weber/gpsoauth?tab=readme-ov-file#alternative-flow.
 
 ## Tools
 
